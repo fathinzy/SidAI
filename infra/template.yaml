@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SmartLorry - AI Fleet Emissions & Congestion platform (SDG 13).
+  Free-tier serverless stack: Lambda (Python) + API Gateway HTTP API + DynamoDB
+  + S3 static site + CloudFront. Region: ap-southeast-2 (project region).
+
+# -----------------------------------------------------------------------------
+# PARAMETERS
+# -----------------------------------------------------------------------------
+Parameters:
+  ProjectName:
+    Type: String
+    Default: smartlorry
+    Description: Prefix for all resource names.
+
+# -----------------------------------------------------------------------------
+# GLOBALS
+# -----------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 256          # small = cheaper; physics fallback needs little RAM
+    Architectures:
+      - arm64                # Graviton is cheaper per ms and free-tier eligible
+    Environment:
+      Variables:
+        DATA_DIR: /var/task/data
+        MODELS_DIR: /var/task/models
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # BACKEND API LAMBDA
+  # Bundles backend code + simulated data. Uses the built-in physics emissions
+  # model (no scikit-learn) so the zip stays tiny and free-tier safe.
+  # To ship the trained ML model instead, switch to the container image build
+  # documented in docs/DEPLOYMENT.md.
+  # ---------------------------------------------------------------------------
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-api"
+      Handler: lambda_handler.handler
+      CodeUri: ../backend/
+      Description: SmartLorry API - emissions, congestion, KPIs, simulator
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TelemetryTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TelemetryTable
+      Events:
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiBase:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+
+  # ---------------------------------------------------------------------------
+  # HTTP API (cheaper + simpler than REST API; 1M calls/mo free for 12 months)
+  # ---------------------------------------------------------------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - "*"
+
+  # ---------------------------------------------------------------------------
+  # DYNAMODB - telemetry store (on-demand; 25GB always-free)
+  # ---------------------------------------------------------------------------
+  TelemetryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-telemetry"
+      BillingMode: PAY_PER_REQUEST     # no idle cost; scales to zero
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  # ---------------------------------------------------------------------------
+  # S3 - static dashboard hosting (private; served via CloudFront OAC)
+  # ---------------------------------------------------------------------------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-site-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  # ---------------------------------------------------------------------------
+  # CLOUDFRONT - global CDN in front of the S3 dashboard
+  # ---------------------------------------------------------------------------
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${ProjectName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100     # cheapest edge footprint
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !Ref OriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+          Compress: true
+        CustomErrorResponses:          # SPA fallback
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+# -----------------------------------------------------------------------------
+# OUTPUTS
+# -----------------------------------------------------------------------------
+Outputs:
+  ApiUrl:
+    Description: Base URL of the SmartLorry API (set as VITE_API_BASE for the frontend build)
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  DashboardUrl:
+    Description: Public dashboard URL (CloudFront)
+    Value: !Sub "https://${Distribution.DomainName}"
+  SiteBucketName:
+    Description: S3 bucket to upload the built frontend (dist/) into
+    Value: !Ref SiteBucket
+  TableName:
+    Value: !Ref TelemetryTable

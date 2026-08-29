@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.local
+
+# Data & models (generated artifacts)
+data-simulator/output/
+ml/models/*.pkl
+ml/models/*.joblib
+ml/models/*.onnx
+
+# AWS SAM
+.aws-sam/
+
+# Staged Lambda build assets (produced by infra/stage_assets.py)
+backend/data/
+backend/models/
+
+# Env & secrets
+.env
+.env.*
+*.pem
+aws-credentials*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

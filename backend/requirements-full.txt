@@ -1,0 +1,6 @@
+# Full dependencies for LOCAL dev or CONTAINER-image Lambda (trained ML model).
+# For the free-tier zip Lambda, requirements.txt is intentionally empty and the
+# physics emissions fallback in service.py is used instead.
+scikit-learn>=1.4
+joblib>=1.3
+numpy>=1.26

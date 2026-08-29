@@ -1,0 +1,38 @@
+{
+  "per_target": {
+    "co_g": {
+      "r2": 0.9996,
+      "mae": 3.586
+    },
+    "co2_g": {
+      "r2": 0.9996,
+      "mae": 988.764
+    },
+    "nox_g": {
+      "r2": 0.9996,
+      "mae": 12.175
+    },
+    "ch4_g": {
+      "r2": 0.9996,
+      "mae": 0.06
+    }
+  },
+  "feature_importances": {
+    "distance_km": 0.3675,
+    "class=Electric rigid (BEV)": 0.1826,
+    "class=Prime mover + trailer (Euro 3)": 0.147,
+    "fuel=electric": 0.147,
+    "avg_speed_kmh": 0.1034,
+    "class=Prime mover + trailer (Euro 5)": 0.0169,
+    "class=Rigid 2-axle (Euro 5)": 0.0091,
+    "class=Rigid 3-axle (Euro 4)": 0.0078,
+    "congestion_index": 0.0075,
+    "load_ratio": 0.007,
+    "fuel=diesel": 0.0016,
+    "fuel=biodiesel-b20": 0.0011,
+    "class=Rigid 3-axle (B20 biodiesel)": 0.0011,
+    "hour": 0.0002,
+    "idle_seconds": 0.0001,
+    "day_of_week": 0.0
+  }
+}

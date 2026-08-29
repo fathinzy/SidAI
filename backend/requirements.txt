@@ -1,0 +1,6 @@
+# Intentionally empty for the free-tier zip Lambda build.
+# The API runs on Python stdlib + the built-in physics emissions model, so the
+# deployment package stays tiny and well within AWS Free Tier limits.
+#
+# To deploy the full scikit-learn model instead, use the container-image build
+# (see docs/DEPLOYMENT.md) with requirements-full.txt.
