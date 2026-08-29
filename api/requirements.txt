@@ -1,0 +1,4 @@
+# Intentionally empty. The Vercel API function runs on the Python stdlib plus the
+# built-in physics/heuristic models (same as the free-tier Lambda build). No
+# scikit-learn / joblib needed, which keeps the serverless bundle small and cold
+# starts fast. See docs/DEPLOYMENT.md for the full-ML container option on AWS.
