@@ -27,7 +27,7 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 
 
 COMPANIES = [
-    "Lorriq Logistics Sdn Bhd", "MMC Freight Services", "Kontena Nasional Bhd",
+    "SidAI Logistics Sdn Bhd", "MMC Freight Services", "Kontena Nasional Bhd",
     "Tiong Nam Logistics", "GD Express Carrier", "Pos Logistics Bhd",
     "Swift Haulage Bhd", "Century Logistics Holdings",
 ]

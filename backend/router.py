@@ -54,7 +54,7 @@ def dispatch(method, path, query=None, body=None):
         }
 
     if path in ("/", "/api", "/api/health"):
-        return _ok({"service": "Lorriq", "status": "ok",
+        return _ok({"service": "SidAI", "status": "ok",
                     "sdg": "SDG 13 - Climate Action"})
 
     if method == "GET" and path == "/api/fleet":

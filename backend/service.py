@@ -461,7 +461,7 @@ def get_explain():
 
 
 # ===========================================================================
-# NEW ENDPOINTS (Lorriq redesign)
+# NEW ENDPOINTS (SidAI redesign)
 # ===========================================================================
 
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -787,7 +787,7 @@ def get_report(scope="daily"):
 
 
 # ===========================================================================
-# LIVE ANIMATED POSITIONS (Lorriq v2)
+# LIVE ANIMATED POSITIONS (SidAI v2)
 # ===========================================================================
 
 # Cache corridor polylines (list of (lat,lng) nodes) from the domain model.
@@ -889,7 +889,7 @@ def get_live_positions(t_seconds=None):
 
 
 # ===========================================================================
-# LIVE DRIVER FEED (chat-style, per-vehicle) + TRIP BOOKING (Lorriq v2)
+# LIVE DRIVER FEED (chat-style, per-vehicle) + TRIP BOOKING (SidAI v2)
 # ===========================================================================
 
 _FEED_TEMPLATES = [
@@ -1012,7 +1012,7 @@ def list_trips(vehicle="all", status="all"):
 
 
 # ===========================================================================
-# VEHICLE REGISTRATION + PROFILE HISTORY (Lorriq v2)
+# VEHICLE REGISTRATION + PROFILE HISTORY (SidAI v2)
 # ===========================================================================
 
 # In-memory registrations added via the Registry form (demo; resets on cold start).
@@ -1068,7 +1068,7 @@ def get_vehicle_history(vehicle):
 
 
 # ===========================================================================
-# MAINTENANCE TRACKING (Lorriq v3)
+# MAINTENANCE TRACKING (SidAI v3)
 # ===========================================================================
 
 # Maintenance fields tracked on every vehicle. `renew_months` is how far the
@@ -1236,7 +1236,7 @@ def mark_maintenance_done(params):
 
 
 # ===========================================================================
-# DRIVER REGISTRY + DRIVER BEHAVIOR PROFILES (Lorriq v3)
+# DRIVER REGISTRY + DRIVER BEHAVIOR PROFILES (SidAI v3)
 # ===========================================================================
 
 # Newly registered drivers (demo store, resets on cold start).
@@ -1436,7 +1436,7 @@ def register_driver(params):
 
 
 # ===========================================================================
-# AI DRIVER SUGGESTION FOR TRIP ORDERS (Lorriq v3)
+# AI DRIVER SUGGESTION FOR TRIP ORDERS (SidAI v3)
 # ===========================================================================
 
 def suggest_driver(params):
@@ -1516,7 +1516,7 @@ def suggest_driver(params):
 
 
 # ===========================================================================
-# CO2-AVOIDED SCENARIO COMPARISON (Emission Tracker, per vehicle) — Lorriq v3
+# CO2-AVOIDED SCENARIO COMPARISON (Emission Tracker, per vehicle) — SidAI v3
 # ===========================================================================
 
 def get_scenario_comparison(vehicle, period="all", year=None, month=None, day=None):

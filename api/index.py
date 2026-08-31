@@ -1,5 +1,5 @@
 """
-Vercel Python serverless function for the Lorriq / SmartLorry demo.
+Vercel Python serverless function for the SidAI / SmartLorry demo.
 
 This reuses the exact same framework-agnostic router (`router.dispatch`) that the
 AWS Lambda handler and the local dev server use, so behaviour is identical across

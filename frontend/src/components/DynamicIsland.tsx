@@ -15,7 +15,7 @@ export default function DynamicIsland({ fleetCount, activeCount, co2SavedT, topA
       <div className={`island ${expanded ? "expanded" : ""}`} onClick={() => setExpanded((e) => !e)}>
         <div className="island-row">
           <span className="live-dot" />
-          <strong>Lorriq Live</strong>
+          <strong>SidAI Live</strong>
           <span className="sep">|</span>
           <span>{activeCount}/{fleetCount} active</span>
           <span className="sep">|</span>

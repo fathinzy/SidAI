@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 export type Theme = "light" | "dark";
 
-const KEY = "lorriq-theme";
+const KEY = "sidai-theme";
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {

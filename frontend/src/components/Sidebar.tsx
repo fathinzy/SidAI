@@ -60,7 +60,7 @@ export default function Sidebar({
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="side-brand">
         <div className="side-logo">🚚</div>
-        <span className="name">Lorriq</span>
+        <span className="name">SidAI</span>
       </div>
 
       <nav className="nav-group">

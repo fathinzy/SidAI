@@ -1,4 +1,4 @@
-// API client for the Lorriq backend.
+// API client for the SidAI backend.
 // In dev, Vite proxies /api -> http://localhost:8000.
 // In production, set VITE_API_BASE to your API Gateway URL at build time.
 

@@ -50,7 +50,7 @@ export default function App() {
   const headings: Record<string, { title: string; sub: string }> = {
     "dashboard-emissions": { title: "Emission Tracker", sub: "CO₂ intelligence: AI-Optimized vs Standard Routing, filtered by time and vehicle." },
     "dashboard-tracking": { title: "Live Tracking", sub: "Real-time fleet positions, congestion forecasts and automated incident response." },
-    "trip-neworder": { title: "New Order", sub: "Plan a shipment and let Lorriq AI recommend the greenest capable vehicle." },
+    "trip-neworder": { title: "New Order", sub: "Plan a shipment and let SidAI AI recommend the greenest capable vehicle." },
     "trip-triplist": { title: "List of Trip", sub: "All scheduled, booked and completed trips across the fleet." },
     "profile-vehicle": { title: "Vehicle Profile", sub: "Full vehicle profile with specifications, compliance and operating history." },
     "profile-driver": { title: "Driver Profile", sub: "AI-powered driver safety and performance tracking. Click a driver for their full profile." },

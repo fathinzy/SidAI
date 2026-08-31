@@ -121,7 +121,7 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
     doc.rect(0, 0, 210, 26, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold"); doc.setFontSize(20);
-    doc.text("Lorriq", 14, 13);
+    doc.text("SidAI", 14, 13);
     doc.setFontSize(10); doc.setFont("helvetica", "normal");
     doc.text("AI Fleet Emissions & Congestion Intelligence", 14, 20);
     doc.setTextColor(40, 33, 25); doc.setFontSize(15); doc.setFont("helvetica", "bold");
@@ -192,7 +192,7 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
 
     const vtag = vehicle === "all" ? "fleet" : vehicle;
     const ptag = (filters.period ?? "all");
-    doc.save(`Lorriq_${ptag}_${vtag}_ESG_report.pdf`);
+    doc.save(`SidAI_${ptag}_${vtag}_ESG_report.pdf`);
     } finally {
       setExporting(false);
     }

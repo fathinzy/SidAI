@@ -68,7 +68,7 @@ export default function TripOrder() {
       {/* Order form */}
       <div className="card">
         <h3>New Trip / Order</h3>
-        <p className="sub">Enter the shipment details. Lorriq AI scores every capable vehicle on CO₂, load right-sizing and fuel type.</p>
+        <p className="sub">Enter the shipment details. SidAI scores every capable vehicle on CO₂, load right-sizing and fuel type.</p>
         <div style={{ display: "grid", gap: 14 }}>
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label className="ff"><span>Start location</span>

@@ -76,7 +76,7 @@ function VehicleRegistry() {
         <div className="reg-section-title">a) Vehicle Registry</div>
         <div className="form-grid">
           <Field label="Vehicle Registration Number" k="registration_no" form={form} set={set} placeholder="e.g. WXY 1234" />
-          <Field label="Company / Owner" k="company" form={form} set={set} placeholder="e.g. Lorriq Logistics Sdn Bhd" />
+          <Field label="Company / Owner" k="company" form={form} set={set} placeholder="e.g. SidAI Logistics Sdn Bhd" />
         </div>
 
         <div className="reg-section-title">b) Vehicle Specifications</div>

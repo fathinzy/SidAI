@@ -1,6 +1,6 @@
 # Competitive Analysis & SWOT — Draft 2 (verified)
 
-**Our system:** SmartLorry / Lorriq (AI Fleet Emissions & Congestion Platform)
+**Our system:** SmartLorry / SidAI (AI Fleet Emissions & Congestion Platform)
 **Competitor:** **EcoTrace Logistics** by Wan Hakim Hakimi (TAR UMT university project)
 Source verified from GitHub: `github.com/Dandidit/route-optimization-app` (branch `master`).
 
@@ -67,7 +67,7 @@ real trained models behind it.
 
 ## 2. Feature comparison (verified)
 
-| Capability | EcoTrace Logistics | SmartLorry / Lorriq |
+| Capability | EcoTrace Logistics | SmartLorry / SidAI |
 |---|---|---|
 | **Route optimization** | ✅ UI + before/after view — but **fake** (hardcoded % improvements, see §3) | ⚠️ No route solver yet (forecasts congestion, scores emissions) |
 | **Emissions model** | Fuel-liters × fixed emission factor (diesel 2.68, etc.) — **static coefficients** | ✅ Trained ML model, R2≈0.99, physics-grounded U-curve (idle→cruise), ~8.6x CO2 swing |
@@ -109,7 +109,7 @@ technical judge who opens the code will see this immediately.
 
 ---
 
-## 4. SWOT — SmartLorry / Lorriq (relative to EcoTrace)
+## 4. SWOT — SmartLorry / SidAI (relative to EcoTrace)
 
 ### Strengths
 - **Genuine ML with defensible numbers** (R2 0.99 / 0.92) vs. their hardcoded constants.

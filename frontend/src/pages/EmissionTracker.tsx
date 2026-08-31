@@ -98,7 +98,7 @@ export default function EmissionTracker({ vehicles, years }: Props) {
         <>
           {/* 9 KPI boxes */}
           <div className="grid kpi-grid" style={{ marginBottom: 16 }}>
-            <Box label="Total CO₂ (AI-Optimized)" value={fmt(kpis?.total_co2_tonnes)} unit="t" tone="" hint="Lorriq AI applied" />
+            <Box label="Total CO₂ (AI-Optimized)" value={fmt(kpis?.total_co2_tonnes)} unit="t" tone="" hint="SidAI applied" />
             <Box label="Avg CO₂ / Vehicle" value={fmt(kpis?.avg_co2_per_vehicle_tonnes)} unit="t" />
             <Box label="Trees Equivalent" value={fmt(kpis?.trees_equivalent, 0)} tone="green" hint="mature trees / year" />
             <Box label="Total CO₂ (Standard Routing)" value={fmt(kpis?.total_co2_without_ai_tonnes)} unit="t" tone="red" hint="without AI optimization" />
@@ -144,7 +144,7 @@ export default function EmissionTracker({ vehicles, years }: Props) {
                 </ResponsiveContainer>
                 {metric === "intensity" && (
                   <p className="sub" style={{ marginTop: 10, marginBottom: 0 }}>
-                    Lorriq's AI-optimized routing keeps carbon intensity below the EU 2025 heavy-duty
+                    SidAI's AI-optimized routing keeps carbon intensity below the EU 2025 heavy-duty
                     vehicle target (Reg. 2019/1242), while standard routing exceeds it.
                   </p>
                 )}
