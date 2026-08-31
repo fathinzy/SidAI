@@ -4,7 +4,9 @@ import { api } from "../api";
 interface Props { vehicles: string[]; }
 
 export default function VehicleProfile({ vehicles }: Props) {
-  const [selected, setSelected] = useState<string>("");
+  const [selected, setSelected] = useState<string>("");   // "" = show fleet grid
+  const [fleet, setFleet] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
   const [vehicle, setVehicle] = useState<any>(null);
   const [history, setHistory] = useState<any>(null);
   const [maint, setMaint] = useState<any>(null);
@@ -13,11 +15,11 @@ export default function VehicleProfile({ vehicles }: Props) {
   const [draft, setDraft] = useState<any>({});
 
   useEffect(() => {
-    if (!selected && vehicles.length) setSelected(vehicles[0]);
-  }, [vehicles, selected]);
+    api.fleet().then((f) => setFleet(f.lorries ?? []));
+  }, []);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!selected) { setVehicle(null); return; }
     let active = true;
     Promise.all([api.registry(selected), api.vehicleHistory(selected), api.vehicleMaintenance(selected)])
       .then(([r, h, m]) => {
@@ -46,6 +48,11 @@ export default function VehicleProfile({ vehicles }: Props) {
     reader.readAsDataURL(file);
   }
 
+  // ---- Fleet grid view (no vehicle opened) ----
+  if (!selected) {
+    return <FleetGrid fleet={fleet} search={search} setSearch={setSearch} onOpen={setSelected} />;
+  }
+
   if (!vehicle) return <div className="loading">Loading profile…</div>;
 
   const v = editing ? draft : vehicle;
@@ -54,6 +61,10 @@ export default function VehicleProfile({ vehicles }: Props) {
   return (
     <>
       <div className="filters">
+        <button className="ghost" style={{ cursor: "pointer" }}
+                onClick={() => { setSelected(""); setEditing(false); }}>
+          ← Back to fleet
+        </button>
         <div className="field">
           <label>Vehicle</label>
           <select value={selected} onChange={(e) => setSelected(e.target.value)}>
@@ -157,6 +168,90 @@ export default function VehicleProfile({ vehicles }: Props) {
         />
       )}
     </>
+  );
+}
+
+function FleetGrid({ fleet, search, setSearch, onOpen }: any) {
+  if (!fleet.length) return <div className="loading">Loading fleet…</div>;
+
+  const num = (x: any) => { const n = parseFloat(x); return isNaN(n) ? 0 : n; };
+  const total = fleet.length;
+  const active = fleet.filter((l: any) => l.status === "Active").length;
+  const inMaint = fleet.filter((l: any) => l.status === "Maintenance").length;
+  const evs = fleet.filter((l: any) => String(l.fuel).toLowerCase() === "electric").length;
+  const utils = fleet.map((l: any) => {
+    const cap = num(l.payload_kg);
+    const load = num(l.current_load_kg ?? l.load_kg);
+    return cap ? Math.min(100, (load / cap) * 100) : 0;
+  });
+  const avgUtil = utils.length ? Math.round(utils.reduce((a: number, b: number) => a + b, 0) / utils.length) : 0;
+
+  const q = search.trim().toLowerCase();
+  const shown = q
+    ? fleet.filter((l: any) =>
+        String(l.lorry_id).toLowerCase().includes(q) ||
+        String(l.registration_no).toLowerCase().includes(q) ||
+        String(l.make).toLowerCase().includes(q) ||
+        String(l.vehicle_type).toLowerCase().includes(q))
+    : fleet;
+
+  return (
+    <>
+      <div className="grid kpi-grid" style={{ marginBottom: 16 }}>
+        <StatCard ico="🚚" value={total} label="Total Vehicles" />
+        <StatCard ico="✅" value={active} label="Active" tone="green" />
+        <StatCard ico="🔧" value={inMaint} label="In Maintenance" tone="gold" />
+        <StatCard ico="📊" value={`${avgUtil}%`} label="Avg Utilization" tone="blue" />
+        <StatCard ico="⚡" value={evs} label="Electric Vehicles" tone="green" />
+      </div>
+
+      <div className="filters">
+        <div className="field" style={{ flex: 1 }}>
+          <label>Search</label>
+          <input placeholder="Search vehicles by ID, plate, make…" value={search}
+                 onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="driver-grid">
+        {shown.map((l: any) => {
+          const cap = num(l.payload_kg);
+          const load = num(l.current_load_kg ?? l.load_kg);
+          const util = cap ? Math.min(100, Math.round((load / cap) * 100)) : 0;
+          const utilTone = util >= 85 ? "bad" : util >= 70 ? "warn" : "good";
+          return (
+            <div key={l.lorry_id} className="driver-card" onClick={() => onOpen(l.lorry_id)}>
+              <div className="driver-card-head">
+                <div className="driver-avatar">{String(l.fuel).toLowerCase() === "electric" ? "⚡" : "🚚"}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{l.lorry_id}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>{l.make} {l.model}</div>
+                </div>
+                <span className={`pill ${l.status}`}>{l.status}</span>
+              </div>
+              <div className="veh-spec"><span>🏋 Capacity</span><b>{cap ? `${cap.toLocaleString()} kg` : "—"}</b></div>
+              <div className="veh-spec"><span>📦 Current Load</span><b>{load ? `${load.toLocaleString()} kg` : "—"}</b></div>
+              <div className="veh-spec"><span>⛽ Fuel</span><b style={{ textTransform: "capitalize" }}>{l.fuel}</b></div>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
+                  <span>Load Utilization</span><span>{util}%</span>
+                </div>
+                <div className="util-track"><div className={`util-fill ${utilTone}`} style={{ width: `${util}%` }} /></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function StatCard({ ico, value, label, tone }: any) {
+  return (
+    <div className={`kpi ${tone ?? ""}`}>
+      <div className="label">{ico} {label}</div>
+      <div className="value">{value}</div>
+    </div>
   );
 }
 

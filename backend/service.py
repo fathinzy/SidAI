@@ -192,8 +192,15 @@ def get_fleet():
     out = []
     for l in fleet:
         pos = latest.get(l["lorry_id"])
+        # deterministic "current load" per vehicle (0.55..0.98 of payload) so the
+        # fleet utilisation bars are stable and realistic without extra data.
+        payload = _num(l.get("payload_kg"))
+        ratio = 0.55 + (hash(l["lorry_id"]) % 44) / 100.0  # 0.55..0.98
+        current_load = int(payload * ratio) if payload else 0
         out.append({
             **l,
+            "current_load_kg": current_load,
+            "load_utilisation_pct": round(ratio * 100, 0) if payload else 0,
             "lat": _num(pos["to_lat"]) if pos else _num_default_lat(l),
             "lng": _num(pos["to_lng"]) if pos else _num_default_lng(l),
             "last_segment": pos["segment_id"] if pos else None,

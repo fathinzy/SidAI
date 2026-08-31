@@ -370,3 +370,21 @@ tr:hover td { background: var(--surface-2); }
 .data-table th { color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--border); }
 .data-table td { padding: 8px 8px; border-bottom: 1px solid var(--border); }
 .data-table tr:hover td { background: var(--surface-2); }
+
+/* ---- Fleet grid cards (Vehicle Profile) ---- */
+.veh-spec { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; padding: 5px 0; }
+.veh-spec span { color: var(--muted); }
+.util-track { height: 7px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.util-fill { height: 100%; border-radius: 999px; }
+.util-fill.good { background: var(--green); }
+.util-fill.warn { background: var(--amber); }
+.util-fill.bad { background: var(--red); }
+
+/* ---- AI recommendation cards (Report analytics) ---- */
+.rec-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 8px; }
+.rec-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.rec-card.high { border-left: 3px solid var(--red); }
+.rec-card.medium { border-left: 3px solid var(--amber); }
+.rec-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rec-card-title { font-weight: 700; font-size: 13px; }
+.rec-card-body { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.5; }
