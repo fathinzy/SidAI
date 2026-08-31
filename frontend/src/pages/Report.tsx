@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -20,6 +20,12 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
   const [fuelMix, setFuelMix] = useState<any[]>([]);      // fuel type distribution
   const [recs, setRecs] = useState<any[]>([]);            // AI recommendations
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+
+  // chart card refs so we can snapshot them into the PDF
+  const trendRef = useRef<HTMLDivElement>(null);
+  const fuelRef = useRef<HTMLDivElement>(null);
+  const rankRef = useRef<HTMLDivElement>(null);
 
   const vehicle = filters.vehicle ?? "all";
 
@@ -69,13 +75,48 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
     }[filters.period ?? "all"] ?? "";
   }
 
+  async function captureChart(el: HTMLElement | null) {
+    if (!el) return null;
+    const { default: html2canvas } = await import("html2canvas");
+    // solid background so the chart isn't transparent on the white PDF page
+    const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
+    const canvas = await html2canvas(el, { backgroundColor: bg, scale: 2, logging: false });
+    return canvas.toDataURL("image/png");
+  }
+
   async function download() {
-    if (!kpis?.available) return;
+    if (!kpis?.available || exporting) return;
+    setExporting(true);
+    try {
     const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
       import("jspdf"), import("jspdf-autotable"),
     ]);
+    // snapshot the three chart cards before building the PDF
+    const [trendImg, fuelImg, rankImg] = await Promise.all([
+      captureChart(trendRef.current),
+      captureChart(fuelRef.current),
+      captureChart(rankRef.current),
+    ]);
     const k = kpis;
     const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const contentW = pageW - margin * 2;
+
+    // helper: add an image scaled to content width, paginating if needed
+    const addImage = (img: string | null, title: string) => {
+      if (!img) return;
+      const props = doc.getImageProperties(img);
+      const h = (props.height / props.width) * contentW;
+      let y = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 10 : 68;
+      if (y + h + 12 > doc.internal.pageSize.getHeight() - margin) {
+        doc.addPage(); y = margin + 6;
+      }
+      doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(40, 33, 25);
+      doc.text(title, margin, y);
+      doc.addImage(img, "PNG", margin, y + 3, contentW, h);
+      (doc as any).lastAutoTable = { finalY: y + 3 + h }; // track vertical cursor
+    };
     doc.setFillColor(217, 102, 43);
     doc.rect(0, 0, 210, 26, "F");
     doc.setTextColor(255, 255, 255);
@@ -107,7 +148,12 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
       styles: { fontSize: 10, cellPadding: 3 },
     });
 
-    // Per-vehicle CO2 ranking (reflects the vehicle filter)
+    // Chart images captured from the dashboard
+    addImage(trendImg, `Carbon Emissions Trend (${xAxisLabel()})`);
+    addImage(fuelImg, "Fleet Fuel Type Distribution");
+    addImage(rankImg, "Vehicle CO2 Ranking");
+
+    // Per-vehicle CO2 ranking table (reflects the vehicle filter)
     if (ranking.length) {
       autoTable(doc, {
         startY: (doc as any).lastAutoTable.finalY + 10,
@@ -121,9 +167,35 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
       });
     }
 
+    // AI-powered recommendations
+    if (recs.length) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [["Priority", "Location", "AI Recommendation"]],
+        body: recs.slice(0, 8).map((r) => [
+          (r.priority ?? "").toUpperCase(),
+          r.segment_id?.split("::")[1]?.trim() ?? "Congestion hotspot",
+          r.message ?? "",
+        ]),
+        headStyles: { fillColor: [217, 102, 43] },
+        columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 40 } },
+        styles: { fontSize: 9, cellPadding: 2.5, overflow: "linebreak" },
+        didParseCell: (data: any) => {
+          if (data.section === "body" && data.column.index === 0) {
+            const v = String(data.cell.raw).toLowerCase();
+            if (v === "high") data.cell.styles.textColor = [192, 57, 43];
+            else if (v === "medium") data.cell.styles.textColor = [217, 138, 31];
+          }
+        },
+      });
+    }
+
     const vtag = vehicle === "all" ? "fleet" : vehicle;
     const ptag = (filters.period ?? "all");
     doc.save(`Lorriq_${ptag}_${vtag}_ESG_report.pdf`);
+    } finally {
+      setExporting(false);
+    }
   }
 
   const k = kpis;
@@ -140,7 +212,9 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
         <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} years={years} showTime />
         <button className="primary" style={{ cursor: "pointer" }}
-                onClick={download} disabled={!k?.available}>⬇ Download PDF</button>
+                onClick={download} disabled={!k?.available || exporting}>
+          {exporting ? "Generating PDF…" : "⬇ Download PDF"}
+        </button>
       </div>
 
       {/* KPI target cards */}
@@ -161,7 +235,7 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
 
           {/* Charts row */}
           <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", gap: 16, marginBottom: 16 }}>
-            <div className="card">
+            <div className="card" ref={trendRef}>
               <h3>Carbon Emissions Trend</h3>
               <p className="sub">CO₂ (tonnes): AI-optimised vs standard routing · {xAxisLabel()}.</p>
               <ResponsiveContainer width="100%" height={260}>
@@ -177,7 +251,7 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
               </ResponsiveContainer>
             </div>
 
-            <div className="card">
+            <div className="card" ref={fuelRef}>
               <h3>Fleet Fuel Type Distribution</h3>
               <p className="sub">Current fleet composition by fuel.</p>
               <ResponsiveContainer width="100%" height={260}>
@@ -192,7 +266,7 @@ export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
           </div>
 
           {/* Vehicle CO2 ranking bar chart */}
-          <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card" ref={rankRef} style={{ marginBottom: 16 }}>
             <h3>Vehicle CO₂ Ranking</h3>
             <p className="sub">Top emitters by total CO₂ (tonnes). Targets for optimisation.</p>
             <ResponsiveContainer width="100%" height={280}>
