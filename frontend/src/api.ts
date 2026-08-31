@@ -47,6 +47,7 @@ export const api = {
   emissionSeries: (f?: Filters) => get<any>(`/api/emission-series${qs(f)}`),
   vehicleRanking: (f?: Filters) => get<any>(`/api/vehicle-ranking${qs(f)}`),
   ecoScores: (f?: Filters) => get<any>(`/api/eco-scores${qs(f)}`),
+  scenarioCompare: (f?: Filters) => get<any>(`/api/scenario-compare${qs(f)}`),
   // live tracking
   fleet: () => get<any>("/api/fleet"),
   forecast: (hours = 12) => get<any>(`/api/forecast/congestion?hours=${hours}`),

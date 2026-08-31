@@ -26,8 +26,11 @@ export default function EmissionTracker({ vehicles, years }: Props) {
   const [series, setSeries] = useState<any>(null);
   const [ranking, setRanking] = useState<any>(null);
   const [eco, setEco] = useState<any>(null);
+  const [compare, setCompare] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [metric, setMetric] = useState<"total" | "intensity">("intensity");
+
+  const singleVehicle = !!filters.vehicle && filters.vehicle !== "all";
 
   useEffect(() => {
     let active = true;
@@ -44,6 +47,14 @@ export default function EmissionTracker({ vehicles, years }: Props) {
     return () => { active = false; };
   }, [filters]);
 
+  // scenario comparison only makes sense for a single vehicle
+  useEffect(() => {
+    if (!singleVehicle) { setCompare(null); return; }
+    let active = true;
+    api.scenarioCompare(filters).then((c) => { if (active) setCompare(c); });
+    return () => { active = false; };
+  }, [filters, singleVehicle]);
+
   const chartData = (series?.points ?? []).map((p: any) => ({
     label: p.label,
     "AI-Optimized": metric === "intensity" ? p.ai_intensity : p.with_ai_t,
@@ -55,6 +66,31 @@ export default function EmissionTracker({ vehicles, years }: Props) {
   return (
     <>
       <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} years={years} showTime />
+
+      {singleVehicle && compare?.available && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3>🌱 "CO₂ Avoided" — {compare.vehicle}</h3>
+          <p className="sub">Standard Route (business-as-usual) vs Sid-AI Optimized, across {compare.trips} trips in range.</p>
+          <table className="compare-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th style={{ textAlign: "right" }}>{compare.standard_label}</th>
+                <th style={{ textAlign: "right" }}>{compare.ai_label}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compare.rows.map((row: any) => (
+                <tr key={row.metric} className={row.highlight ? "compare-highlight" : ""}>
+                  <td>{row.metric}</td>
+                  <td style={{ textAlign: "right" }}>{row.standard}</td>
+                  <td style={{ textAlign: "right", fontWeight: row.highlight ? 700 : 600, color: row.highlight ? "var(--green)" : "inherit" }}>{row.ai}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {loading && !kpis ? (
         <div className="loading">Loading emission intelligence…</div>

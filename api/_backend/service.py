@@ -1513,3 +1513,55 @@ def suggest_driver(params):
         "note": "Ranked by AI suitability weighing safety score, experience, license "
                 "validity and familiarity with the assigned vehicle.",
     }
+
+
+# ===========================================================================
+# CO2-AVOIDED SCENARIO COMPARISON (Emission Tracker, per vehicle) — Lorriq v3
+# ===========================================================================
+
+def get_scenario_comparison(vehicle, period="all", year=None, month=None, day=None):
+    """
+    "CO2 Avoided" comparison for a single vehicle:
+      Standard Route (business-as-usual) vs Sid-AI Optimized.
+    Aggregates the vehicle's trips over the given filter and returns matched
+    rows: distance, travel time, idle time, CO2, and CO2 avoided.
+    """
+    if not vehicle or vehicle == "all":
+        return {"available": False, "note": "Select a single vehicle to compare scenarios."}
+
+    trips = _filter_trips(_load_csv("trips.csv"), period, year, month, day, vehicle)
+    if not trips:
+        return {"available": False, "vehicle": vehicle, "note": "No trips for this vehicle in range."}
+
+    # AI-optimized actuals (what the fleet actually did)
+    dist = sum(_num(t["distance_km"]) for t in trips)
+    travel_min = sum(_num(t["travel_minutes"]) for t in trips)
+    idle_min = sum(_num(t["idle_seconds"]) for t in trips) / 60.0
+    co2_ai = sum(_num(t["co2_g"]) for t in trips) / 1000.0             # kg
+    co2_std = sum(_num(t["co2_baseline_g"]) for t in trips) / 1000.0   # kg (BAU)
+    idle_std = sum(_num(t.get("idle_baseline_seconds")) for t in trips) / 60.0
+
+    # Standard routing is modelled as slower + more idling (the BAU baseline that
+    # produced co2_baseline_g). Travel time under BAU is higher because of idling
+    # in congestion; estimate it as AI travel time + the extra idle time.
+    extra_idle = max(0.0, idle_std - idle_min)
+    travel_std = travel_min + extra_idle
+
+    co2_avoided = max(0.0, co2_std - co2_ai)
+    rows = [
+        {"metric": "Distance", "standard": f"{dist:.0f} km", "ai": f"{dist:.0f} km"},
+        {"metric": "Travel time", "standard": f"{travel_std:.0f} min", "ai": f"{travel_min:.0f} min"},
+        {"metric": "Idle time", "standard": f"{idle_std:.0f} min", "ai": f"{idle_min:.0f} min"},
+        {"metric": "CO₂", "standard": f"{co2_std:.1f} kg", "ai": f"{co2_ai:.1f} kg"},
+        {"metric": "CO₂ avoided", "standard": "—", "ai": f"{co2_avoided:.1f} kg", "highlight": True},
+    ]
+    return {
+        "available": True,
+        "vehicle": vehicle,
+        "trips": len(trips),
+        "standard_label": "Standard Route",
+        "ai_label": "Sid-AI Optimized",
+        "rows": rows,
+        "co2_avoided_kg": round(co2_avoided, 1),
+        "co2_avoided_pct": round(100.0 * co2_avoided / co2_std, 1) if co2_std else 0,
+    }

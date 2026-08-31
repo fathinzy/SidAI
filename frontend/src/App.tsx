@@ -89,7 +89,7 @@ export default function App() {
           {tab === "trip" && subTab !== "triplist" && <TripOrder />}
           {tab === "profile" && subTab === "driver" && <DriverProfile />}
           {tab === "profile" && subTab !== "driver" && <VehicleProfile vehicles={vehicles} />}
-          {tab === "report" && <Report />}
+          {tab === "report" && <Report vehicles={vehicles} />}
           {tab === "registry" && <Registry sub={subTab === "driver" ? "driver" : "vehicle"} />}
         </div>
       </div>

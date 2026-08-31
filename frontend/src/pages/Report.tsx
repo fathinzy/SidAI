@@ -11,8 +11,11 @@ const FUEL_COLORS: Record<string, string> = {
   diesel: "#c0392b", "biodiesel-b20": "#c8901f", electric: "#0e9f6e", hybrid: "#3f6b8c",
 };
 
-export default function Report() {
+interface ReportProps { vehicles?: string[]; }
+
+export default function Report({ vehicles = [] }: ReportProps) {
   const [scope, setScope] = useState<Scope>("weekly");
+  const [vehicle, setVehicle] = useState<string>("all");
   const [data, setData] = useState<any>(null);           // report summary (for PDF + KPIs)
   const [series, setSeries] = useState<any>(null);        // emission trend
   const [ranking, setRanking] = useState<any[]>([]);      // per-vehicle CO2
@@ -28,26 +31,29 @@ export default function Report() {
     return () => { active = false; };
   }, [scope]);
 
-  // analytics datasets loaded once
+  // analytics datasets follow the vehicle filter
   useEffect(() => {
+    const vf = { period: "year" as const, year: 2026, vehicle };
     Promise.all([
-      api.emissionSeries({ period: "year", year: 2026 }),
-      api.vehicleRanking({ period: "all" }),
+      api.emissionSeries(vf),
+      api.vehicleRanking({ period: "all", vehicle }),
       api.fleet(),
       api.recommendations(),
     ]).then(([s, r, f, rec]) => {
       setSeries(s);
       setRanking((r.ranking ?? []).slice(0, 8));
-      // fuel mix from the fleet
+      // fuel mix: whole fleet, or just the one vehicle when filtered
+      const lorries = (f.lorries ?? []).filter(
+        (l: any) => vehicle === "all" || l.lorry_id === vehicle);
       const counts: Record<string, number> = {};
-      (f.lorries ?? []).forEach((l: any) => {
+      lorries.forEach((l: any) => {
         const k = String(l.fuel).toLowerCase();
         counts[k] = (counts[k] ?? 0) + 1;
       });
       setFuelMix(Object.entries(counts).map(([name, value]) => ({ name, value })));
       setRecs(rec.recommendations ?? []);
     });
-  }, []);
+  }, [vehicle]);
 
   async function download() {
     if (!data?.available) return;
@@ -67,9 +73,10 @@ export default function Report() {
     doc.text(`${cap(scope)} ESG Report`, 14, 40);
     doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(120, 110, 95);
     doc.text(`Reporting period: ${data.period.from} - ${data.period.to}`, 14, 47);
-    doc.text(`SDG 13 - Climate Action  |  Generated ${new Date().toLocaleString()}`, 14, 53);
+    doc.text(`Vehicle scope: ${vehicle === "all" ? "All vehicles (fleet-wide)" : vehicle}`, 14, 53);
+    doc.text(`SDG 13 - Climate Action  |  Generated ${new Date().toLocaleString()}`, 14, 59);
     autoTable(doc, {
-      startY: 62,
+      startY: 68,
       head: [["ESG Metric", "Value"]],
       body: [
         ["Total trips", s.trips.toLocaleString()],
@@ -85,7 +92,23 @@ export default function Report() {
       alternateRowStyles: { fillColor: [246, 241, 234] },
       styles: { fontSize: 10, cellPadding: 3 },
     });
-    doc.save(`Lorriq_${scope}_ESG_report_${data.period.to.replace(/\//g, "-")}.pdf`);
+
+    // Per-vehicle CO2 ranking (reflects the vehicle filter)
+    if (ranking.length) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [["Vehicle", "Fuel", "CO2 (t)", "CO2 saved (t)", "Trips"]],
+        body: ranking.map((r) => [
+          r.lorry_id, r.fuel, String(r.co2_t), String(r.co2_saved_t), String(r.trips),
+        ]),
+        headStyles: { fillColor: [63, 107, 140] },
+        alternateRowStyles: { fillColor: [240, 245, 250] },
+        styles: { fontSize: 9, cellPadding: 2.5 },
+      });
+    }
+
+    const vtag = vehicle === "all" ? "fleet" : vehicle;
+    doc.save(`Lorriq_${scope}_${vtag}_ESG_report_${data.period.to.replace(/\//g, "-")}.pdf`);
   }
 
   const s = data?.summary;
@@ -106,6 +129,13 @@ export default function Report() {
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Vehicle</label>
+          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)}>
+            <option value="all">All vehicles</option>
+            {vehicles.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
         <div style={{ display: "flex", alignItems: "flex-end" }}>

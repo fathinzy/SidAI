@@ -151,6 +151,9 @@ def dispatch(method, path, query=None, body=None):
     if method == "GET" and path == "/api/eco-scores":
         return _ok(service.get_eco_scores(**filters()))
 
+    if method == "GET" and path == "/api/scenario-compare":
+        return _ok(service.get_scenario_comparison(**filters()))
+
     if method == "GET" and path == "/api/explain":
         return _ok(service.get_explain())
 
