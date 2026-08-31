@@ -19,7 +19,7 @@ Parameters:
 # -----------------------------------------------------------------------------
 Globals:
   Function:
-    Runtime: python3.12
+    Runtime: python3.14
     Timeout: 15
     MemorySize: 256          # small = cheaper; physics fallback needs little RAM
     Architectures:
