@@ -31,16 +31,33 @@ export default function Report({ vehicles = [] }: ReportProps) {
     return () => { active = false; };
   }, [scope]);
 
-  // analytics datasets follow the vehicle filter
+  // Emission trend follows BOTH the scope and vehicle, using the same period
+  // logic as the Emission Tracker:
+  //   daily   -> period "day"   (x-axis = 24 hours)
+  //   weekly  -> period "month" (x-axis = days of month)  [closest bucket to a week]
+  //   monthly -> period "year"  (x-axis = Jan–Dec)
+  // Pinned to the report's reporting-period end date so it matches the summary.
   useEffect(() => {
-    const vf = { period: "year" as const, year: 2026, vehicle };
+    const end = data?.period?.to;                     // "dd/mm/yyyy"
+    const [dd, mm, yyyy] = (end ?? "").split("/").map((n: string) => parseInt(n, 10));
+    const year = yyyy || 2026;
+    const seriesFilter =
+      scope === "daily"
+        ? { period: "day" as const, year, month: mm || 1, day: dd || 1, vehicle }
+        : scope === "weekly"
+        ? { period: "month" as const, year, month: mm || 1, vehicle }
+        : { period: "year" as const, year, vehicle };
+
+    api.emissionSeries(seriesFilter).then((s) => setSeries(s));
+  }, [scope, vehicle, data?.period?.to]);
+
+  // ranking / fuel mix / recommendations follow the vehicle filter
+  useEffect(() => {
     Promise.all([
-      api.emissionSeries(vf),
       api.vehicleRanking({ period: "all", vehicle }),
       api.fleet(),
       api.recommendations(),
-    ]).then(([s, r, f, rec]) => {
-      setSeries(s);
+    ]).then(([r, f, rec]) => {
       setRanking((r.ranking ?? []).slice(0, 8));
       // fuel mix: whole fleet, or just the one vehicle when filtered
       const lorries = (f.lorries ?? []).filter(
@@ -163,7 +180,13 @@ export default function Report({ vehicles = [] }: ReportProps) {
           <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", gap: 16, marginBottom: 16 }}>
             <div className="card">
               <h3>Carbon Emissions Trend</h3>
-              <p className="sub">Monthly CO₂ (tonnes): AI-optimised vs standard routing.</p>
+              <p className="sub">
+                CO₂ (tonnes): AI-optimised vs standard routing · {
+                  scope === "daily" ? "by hour (24h)"
+                  : scope === "weekly" ? "by day of month"
+                  : "by month (Jan–Dec)"
+                }.
+              </p>
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={trendRows} margin={{ top: 5, right: 10, bottom: 5, left: -18 }}>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
