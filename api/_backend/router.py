@@ -111,6 +111,32 @@ def dispatch(method, path, query=None, body=None):
     if method == "POST" and path == "/api/suggest-vehicle":
         return _ok(service.suggest_vehicle(body))
 
+    if method == "POST" and path == "/api/suggest-driver":
+        return _ok(service.suggest_driver(body))
+
+    # --- maintenance ---
+    if method == "GET" and path == "/api/vehicle-maintenance":
+        v = q("vehicle")
+        if not v or v == "all":
+            return _bad("vehicle query param required")
+        return _ok(service.get_vehicle_maintenance(v))
+
+    if method == "POST" and path == "/api/maintenance-done":
+        return _ok(service.mark_maintenance_done(body))
+
+    # --- drivers ---
+    if method == "GET" and path == "/api/drivers":
+        return _ok(service.get_drivers())
+
+    if method == "POST" and path == "/api/drivers":
+        return _ok(service.register_driver(body))
+
+    if method == "GET" and path == "/api/driver-detail":
+        d = q("driver")
+        if not d:
+            return _bad("driver query param required")
+        return _ok(service.get_driver_detail(d))
+
     if method == "GET" and path == "/api/forecast/congestion":
         hours = int(q("hours", 12))
         dow = q("day_of_week")

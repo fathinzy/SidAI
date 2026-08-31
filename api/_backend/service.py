@@ -944,6 +944,10 @@ def book_trip(params):
     booking = {
         "trip_id": f"BK-{len(_BOOKINGS) + 1:04d}",
         "lorry_id": params.get("lorry_id"),
+        "driver_id": params.get("driver_id"),
+        "driver_name": params.get("driver_name"),
+        "start_location": params.get("start_location", ""),
+        "end_location": params.get("end_location", ""),
         "etd": params.get("etd"),
         "eta": params.get("eta"),
         "load_kg": _num(params.get("load_weight_kg")),
@@ -982,6 +986,10 @@ def list_trips(vehicle="all", status="all"):
         rows.insert(0, {
             "trip_id": b["trip_id"],
             "lorry_id": b["lorry_id"],
+            "driver_id": b.get("driver_id"),
+            "driver_name": b.get("driver_name"),
+            "start_location": b.get("start_location", ""),
+            "end_location": b.get("end_location", ""),
             "etd": b["etd"],
             "eta": b["eta"],
             "load_kg": b["load_kg"],
@@ -1049,4 +1057,452 @@ def get_vehicle_history(vehicle):
         "total_distance_km": round(total_dist, 1),
         "total_co2_kg": round(total_co2, 1),
         "total_trips": len(trips),
+    }
+
+
+# ===========================================================================
+# MAINTENANCE TRACKING (Lorriq v3)
+# ===========================================================================
+
+# Maintenance fields tracked on every vehicle. `renew_months` is how far the
+# due date is pushed forward when the item is marked done.
+MAINTENANCE_FIELDS = [
+    {"key": "insurance_expiry", "label": "Insurance Expiry", "renew_months": 12},
+    {"key": "roadtax_expiry", "label": "Road Tax Expiry", "renew_months": 12},
+    {"key": "puspakom_due", "label": "Puspakom / Inspection Due", "renew_months": 6},
+    {"key": "last_service", "label": "Service", "renew_months": 6, "is_service": True},
+]
+
+# A maintenance item is "almost due" this many days before its due date.
+MAINTENANCE_WARN_DAYS = 30
+# A service is due this many months after the last service date.
+SERVICE_INTERVAL_MONTHS = 6
+
+# In-memory overrides applied when a maintenance item is marked done (demo store,
+# resets on cold start). Maps lorry_id -> {field_key: new_date_str}.
+_MAINTENANCE_OVERRIDES = {}
+
+
+def _parse_ddmmyyyy(s):
+    """Parse a dd/mm/yyyy string to a date; return None if unparseable."""
+    if not s:
+        return None
+    for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _fmt_ddmmyyyy(d):
+    return d.strftime("%d/%m/%Y")
+
+
+def _add_months(d, months):
+    """Add whole months to a date, clamping the day to the month's length."""
+    import calendar
+    month_index = d.month - 1 + months
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    from datetime import date as _date
+    return _date(year, month, day)
+
+
+def _maintenance_status_for_date(due_date, today=None):
+    """
+    Classify a due date into a traffic-light status.
+    Returns (status, days_remaining) where status is 'overdue'|'due_soon'|'ok'|'unknown'.
+    """
+    if due_date is None:
+        return "unknown", None
+    today = today or datetime.now().date()
+    days = (due_date - today).days
+    if days < 0:
+        return "overdue", days
+    if days <= MAINTENANCE_WARN_DAYS:
+        return "due_soon", days
+    return "ok", days
+
+
+def _effective_maintenance_value(vehicle, field):
+    """
+    Return the current stored value for a maintenance field, applying any
+    in-memory override from a prior 'mark done' action. For the service item we
+    track the *next service due* derived from last_service + interval.
+    """
+    lorry_id = vehicle.get("lorry_id")
+    override = _MAINTENANCE_OVERRIDES.get(lorry_id, {})
+    key = field["key"]
+    raw = override.get(key, vehicle.get(key, ""))
+    return raw
+
+
+def get_vehicle_maintenance(vehicle):
+    """
+    Maintenance panel for one vehicle: each tracked item with its due date,
+    traffic-light status (overdue=red, due_soon=yellow, ok=green) and days left.
+    Also returns an overall status (worst of the items).
+    """
+    fleet = {l["lorry_id"]: l for l in (_load_fleet() + _NEW_VEHICLES)}
+    v = fleet.get(vehicle)
+    if not v:
+        return {"vehicle": vehicle, "available": False}
+
+    today = datetime.now().date()
+    items = []
+    severity_rank = {"overdue": 3, "due_soon": 2, "ok": 1, "unknown": 0}
+    worst = "ok"
+    for field in MAINTENANCE_FIELDS:
+        raw = _effective_maintenance_value(v, field)
+        if field.get("is_service"):
+            # For service, the stored value is the LAST service date; the due date
+            # is that plus the service interval.
+            last = _parse_ddmmyyyy(raw)
+            due = _add_months(last, SERVICE_INTERVAL_MONTHS) if last else None
+            status, days = _maintenance_status_for_date(due, today)
+            items.append({
+                "key": field["key"],
+                "label": "Service Due",
+                "last_done": _fmt_ddmmyyyy(last) if last else "",
+                "due_date": _fmt_ddmmyyyy(due) if due else "",
+                "status": status,
+                "days_remaining": days,
+                "renew_months": field["renew_months"],
+                "is_service": True,
+            })
+        else:
+            due = _parse_ddmmyyyy(raw)
+            status, days = _maintenance_status_for_date(due, today)
+            items.append({
+                "key": field["key"],
+                "label": field["label"],
+                "due_date": _fmt_ddmmyyyy(due) if due else raw,
+                "status": status,
+                "days_remaining": days,
+                "renew_months": field["renew_months"],
+                "is_service": False,
+            })
+        if severity_rank[status] > severity_rank[worst]:
+            worst = status
+
+    return {
+        "vehicle": vehicle,
+        "available": True,
+        "overall_status": worst,
+        "warn_days": MAINTENANCE_WARN_DAYS,
+        "items": items,
+    }
+
+
+def mark_maintenance_done(params):
+    """
+    Mark a maintenance item as completed. Pushes the due date forward by the
+    item's renewal window (from today), so the profile shows the new due date.
+    params: { lorry_id, field }
+    """
+    lorry_id = params.get("lorry_id")
+    field_key = params.get("field")
+    field = next((f for f in MAINTENANCE_FIELDS if f["key"] == field_key), None)
+    if not lorry_id or not field:
+        return {"ok": False, "error": "lorry_id and a valid field are required"}
+
+    today = datetime.now().date()
+    store = _MAINTENANCE_OVERRIDES.setdefault(lorry_id, {})
+    if field.get("is_service"):
+        # Record the service as done TODAY; next-due is derived on read.
+        store[field_key] = _fmt_ddmmyyyy(today)
+        new_due = _add_months(today, SERVICE_INTERVAL_MONTHS)
+    else:
+        new_due = _add_months(today, field["renew_months"])
+        store[field_key] = _fmt_ddmmyyyy(new_due)
+
+    return {
+        "ok": True,
+        "lorry_id": lorry_id,
+        "field": field_key,
+        "completed_on": _fmt_ddmmyyyy(today),
+        "new_due_date": _fmt_ddmmyyyy(new_due),
+        "maintenance": get_vehicle_maintenance(lorry_id),
+    }
+
+
+# ===========================================================================
+# DRIVER REGISTRY + DRIVER BEHAVIOR PROFILES (Lorriq v3)
+# ===========================================================================
+
+# Newly registered drivers (demo store, resets on cold start).
+_NEW_DRIVERS = []
+
+# Seed pools so auto-generated driver identities are realistic + stable per ID.
+_DRIVER_FIRST_M = ["Ahmad", "Mohd", "Kumar", "Lee", "Tan", "Raj", "Faizal", "Hafiz",
+                   "Suresh", "Wong", "Arif", "Zulkifli", "Ganesh", "Chong", "Amir"]
+_DRIVER_FIRST_F = ["Siti", "Nurul", "Fatimah", "Mei Ling", "Priya", "Aisyah",
+                   "Kavitha", "Lim", "Noraini", "Devi"]
+_DRIVER_LAST = ["bin Hassan", "Nurhaliza", "Selvam", "Wei Ming", "Abdullah",
+                "a/l Muthu", "binti Osman", "Wai Keong", "Krishnan", "bin Ismail"]
+
+
+def _driver_identity(driver_id):
+    """Deterministic identity for a driver_id so profiles are stable across calls."""
+    import random as _random
+    seed = int("".join(ch for ch in str(driver_id) if ch.isdigit()) or "0")
+    rng = _random.Random(seed)
+    gender = rng.choice(["Male", "Female"])
+    if gender == "Male":
+        name = f"{rng.choice(_DRIVER_FIRST_M)} {rng.choice(_DRIVER_LAST)}"
+    else:
+        name = f"{rng.choice(_DRIVER_FIRST_F)} {rng.choice(_DRIVER_LAST)}"
+    age = rng.randint(24, 58)
+    # License expiry: some in the past (expired), most in the future.
+    months_off = rng.randint(-3, 30)
+    exp = _add_months(datetime.now().date(), months_off)
+    license_no = f"{rng.choice('ABCDEFGHJKLMNPQRST')}{rng.randint(1000000, 9999999)}"
+    return {
+        "driver_name": name,
+        "driver_age": age,
+        "driver_gender": gender,
+        "license_number": license_no,
+        "license_expiry": _fmt_ddmmyyyy(exp),
+        "photo": "",
+    }
+
+
+def _all_driver_ids():
+    """Every driver_id known from the fleet + trips + newly registered drivers."""
+    ids = set()
+    for l in _load_fleet():
+        if l.get("driver_id"):
+            ids.add(l["driver_id"])
+    for t in _load_csv("trips.csv"):
+        if t.get("driver_id"):
+            ids.add(t["driver_id"])
+    for d in _NEW_DRIVERS:
+        ids.add(d["driver_id"])
+    return sorted(ids)
+
+
+def _driver_record(driver_id):
+    """Merge identity (auto or registered) for one driver."""
+    for d in _NEW_DRIVERS:
+        if d["driver_id"] == driver_id:
+            return d
+    return {"driver_id": driver_id, **_driver_identity(driver_id)}
+
+
+def _driver_trip_stats(driver_id):
+    """Aggregate trips/distance/violations + per-vehicle usage for a driver."""
+    trips = [t for t in _load_csv("trips.csv") if t.get("driver_id") == driver_id]
+    total_dist = sum(_num(t["distance_km"]) for t in trips)
+    total_co2 = sum(_num(t["co2_g"]) for t in trips) / 1000.0
+    total_idle = sum(_num(t["idle_seconds"]) for t in trips)
+
+    # Derive violations from trip telemetry (explainable, not black-box):
+    #   speeding      -> avg_speed over a highway threshold
+    #   harsh idling  -> idle_seconds over a threshold (excessive idling)
+    #   fatigue       -> long single trip (travel_minutes) 
+    violations = []
+    for t in trips:
+        speed = _num(t.get("avg_speed_kmh"))
+        idle = _num(t.get("idle_seconds"))
+        mins = _num(t.get("travel_minutes"))
+        when = t.get("depart", "")
+        vid = t.get("lorry_id")
+        if speed > 95:
+            violations.append({"type": "Speeding", "severity": "high" if speed > 105 else "medium",
+                               "detail": f"Avg speed {speed:.0f} km/h", "lorry_id": vid, "when": when})
+        if idle > 1800:
+            violations.append({"type": "Excessive Idling", "severity": "medium",
+                               "detail": f"{idle/60:.0f} min idling", "lorry_id": vid, "when": when})
+        if mins > 300:
+            violations.append({"type": "Fatigue Risk", "severity": "medium",
+                               "detail": f"{mins/60:.1f} h continuous drive", "lorry_id": vid, "when": when})
+    violations.sort(key=lambda x: x["when"], reverse=True)
+
+    # Per-vehicle usage history (which vehicle, how many trips, last used).
+    by_vehicle = {}
+    for t in trips:
+        vid = t.get("lorry_id")
+        u = by_vehicle.setdefault(vid, {"lorry_id": vid, "trips": 0, "distance_km": 0.0,
+                                        "first_used": t.get("depart", ""), "last_used": t.get("depart", "")})
+        u["trips"] += 1
+        u["distance_km"] += _num(t["distance_km"])
+        if t.get("depart", "") > u["last_used"]:
+            u["last_used"] = t.get("depart", "")
+        if t.get("depart", "") < u["first_used"]:
+            u["first_used"] = t.get("depart", "")
+    vehicle_usage = sorted(by_vehicle.values(), key=lambda u: u["last_used"], reverse=True)
+    for u in vehicle_usage:
+        u["distance_km"] = round(u["distance_km"], 1)
+
+    # Safety score (0..100): start at 100, subtract per violation weighted by severity.
+    penalty = sum(8 if v["severity"] == "high" else 4 for v in violations)
+    # normalise by trip count so busy drivers aren't unfairly punished
+    per_trip_penalty = penalty / max(1, len(trips))
+    safety = max(0, min(100, round(100 - per_trip_penalty * 6, 0)))
+
+    return {
+        "total_trips": len(trips),
+        "total_distance_km": round(total_dist, 1),
+        "total_co2_kg": round(total_co2, 1),
+        "total_idle_min": round(total_idle / 60.0, 0),
+        "violations": violations,
+        "violation_count": len(violations),
+        "vehicle_usage": vehicle_usage,
+        "safety_score": int(safety),
+        "safety_grade": ("Excellent" if safety >= 90 else "Good" if safety >= 75
+                         else "Fair" if safety >= 60 else "Poor"),
+    }
+
+
+def get_drivers():
+    """Driver registry list with a summary card per driver (for the grid view)."""
+    out = []
+    today = datetime.now().date()
+    for did in _all_driver_ids():
+        rec = _driver_record(did)
+        stats = _driver_trip_stats(did)
+        exp = _parse_ddmmyyyy(rec.get("license_expiry"))
+        lic_status, lic_days = _maintenance_status_for_date(exp, today)
+        out.append({
+            **rec,
+            "trips": stats["total_trips"],
+            "distance_km": stats["total_distance_km"],
+            "violations": stats["violation_count"],
+            "safety_score": stats["safety_score"],
+            "safety_grade": stats["safety_grade"],
+            "license_status": lic_status,   # overdue = expired
+            "license_days_remaining": lic_days,
+        })
+    out.sort(key=lambda d: d["safety_score"], reverse=True)
+    return {"count": len(out), "drivers": out}
+
+
+def get_driver_detail(driver_id):
+    """Full driver profile: identity + behavior stats + violations + vehicle usage."""
+    rec = _driver_record(driver_id)
+    stats = _driver_trip_stats(driver_id)
+    today = datetime.now().date()
+    exp = _parse_ddmmyyyy(rec.get("license_expiry"))
+    lic_status, lic_days = _maintenance_status_for_date(exp, today)
+    return {
+        "available": True,
+        "driver": rec,
+        "license_status": lic_status,
+        "license_days_remaining": lic_days,
+        "stats": {
+            "total_trips": stats["total_trips"],
+            "total_distance_km": stats["total_distance_km"],
+            "total_co2_kg": stats["total_co2_kg"],
+            "total_idle_min": stats["total_idle_min"],
+            "safety_score": stats["safety_score"],
+            "safety_grade": stats["safety_grade"],
+            "violation_count": stats["violation_count"],
+        },
+        "violations": stats["violations"][:50],
+        "vehicle_usage": stats["vehicle_usage"],
+    }
+
+
+def register_driver(params):
+    """Create a new driver record from the Driver Registry form. Driver ID auto."""
+    existing = len(_all_driver_ids()) + 1
+    driver_id = params.get("driver_id") or f"DRV-{existing:03d}"
+    # avoid clashes with generated ids
+    known = set(_all_driver_ids())
+    n = existing
+    while driver_id in known:
+        n += 1
+        driver_id = f"DRV-{n:03d}"
+    d = {
+        "driver_id": driver_id,
+        "driver_name": params.get("driver_name", ""),
+        "driver_age": params.get("driver_age", ""),
+        "driver_gender": params.get("driver_gender", ""),
+        "license_number": params.get("license_number", ""),
+        "license_expiry": params.get("license_expiry", ""),
+        "photo": params.get("photo", ""),
+    }
+    _NEW_DRIVERS.append(d)
+    return {"ok": True, "driver": d, "total_registered": len(_NEW_DRIVERS)}
+
+
+# ===========================================================================
+# AI DRIVER SUGGESTION FOR TRIP ORDERS (Lorriq v3)
+# ===========================================================================
+
+def suggest_driver(params):
+    """
+    Recommend the most suitable driver for a trip/order.
+    Ranks drivers by: safety score, valid (non-expired) license, and experience
+    (trips completed). Optionally favours drivers experienced with the chosen
+    vehicle. params: { lorry_id (optional), distance_km (optional) }
+    Returns ranked candidates with an AI suitability score + reason.
+    """
+    lorry_id = params.get("lorry_id")
+    today = datetime.now().date()
+
+    candidates = []
+    for did in _all_driver_ids():
+        rec = _driver_record(did)
+        stats = _driver_trip_stats(did)
+        exp = _parse_ddmmyyyy(rec.get("license_expiry"))
+        lic_status, lic_days = _maintenance_status_for_date(exp, today)
+        license_valid = lic_status != "overdue"
+
+        # experience with the specific vehicle (if one is chosen)
+        veh_trips = 0
+        if lorry_id:
+            veh_trips = next((u["trips"] for u in stats["vehicle_usage"]
+                              if u["lorry_id"] == lorry_id), 0)
+
+        candidates.append({
+            "driver_id": did,
+            "driver_name": rec.get("driver_name"),
+            "safety_score": stats["safety_score"],
+            "safety_grade": stats["safety_grade"],
+            "trips": stats["total_trips"],
+            "violations": stats["violation_count"],
+            "license_valid": license_valid,
+            "license_status": lic_status,
+            "vehicle_experience_trips": veh_trips,
+        })
+
+    if not candidates:
+        return {"recommended": None, "alternatives": [],
+                "note": "No drivers available. Register a driver first."}
+
+    max_trips = max(c["trips"] for c in candidates) or 1
+    max_veh = max((c["vehicle_experience_trips"] for c in candidates), default=0) or 1
+    for c in candidates:
+        # hard filter: an expired license disqualifies (score heavily penalised)
+        license_factor = 1.0 if c["license_valid"] else 0.0
+        safety_score = c["safety_score"] / 100.0
+        experience = c["trips"] / max_trips
+        veh_fit = (c["vehicle_experience_trips"] / max_veh) if lorry_id else 0.0
+        raw = (0.45 * safety_score + 0.25 * experience +
+               0.15 * veh_fit + 0.15 * license_factor)
+        score = round(100.0 * raw * (1.0 if c["license_valid"] else 0.35), 1)
+        c["score"] = score
+        reasons = []
+        if not c["license_valid"]:
+            reasons.append("⚠ license expired")
+        else:
+            reasons.append(f"{c['safety_grade'].lower()} safety ({c['safety_score']})")
+        if lorry_id and c["vehicle_experience_trips"] > 0:
+            reasons.append(f"{c['vehicle_experience_trips']} trips on this vehicle")
+        reasons.append(f"{c['trips']} total trips")
+        if c["violations"]:
+            reasons.append(f"{c['violations']} violations")
+        c["reason"] = ", ".join(reasons)
+
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    best = candidates[0]
+    return {
+        "input": {"lorry_id": lorry_id},
+        "recommended": best,
+        "alternatives": candidates[1:6],
+        "note": "Ranked by AI suitability weighing safety score, experience, license "
+                "validity and familiarity with the assigned vehicle.",
     }

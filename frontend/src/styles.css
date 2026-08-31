@@ -306,3 +306,67 @@ tr:hover td { background: var(--surface-2); }
 }
 .candidate:hover { border-color: var(--accent); }
 .candidate.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ---- Maintenance status (traffic light) ---- */
+.status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; }
+.status-dot.overdue { background: var(--red); box-shadow: 0 0 0 3px rgba(192,57,43,0.15); }
+.status-dot.due_soon { background: var(--amber); box-shadow: 0 0 0 3px rgba(217,138,31,0.15); }
+.status-dot.ok { background: var(--green); }
+.prow-v.mv-overdue { color: var(--red); }
+.prow-v.mv-due_soon { color: var(--amber); }
+
+.maint-btn { border-radius: 10px; padding: 9px 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.maint-btn.overdue { background: rgba(192,57,43,0.14); color: var(--red); border-color: rgba(192,57,43,0.3); }
+.maint-btn.due_soon { background: rgba(217,138,31,0.16); color: var(--amber); border-color: rgba(217,138,31,0.3); }
+
+/* ---- Modal ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000;
+  display: grid; place-items: center; padding: 20px;
+}
+.modal-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 22px; width: min(560px, 100%); max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow);
+}
+.maint-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+}
+.maint-item.overdue { border-left: 3px solid var(--red); }
+.maint-item.due_soon { border-left: 3px solid var(--amber); }
+.maint-item.ok { border-left: 3px solid var(--green); }
+
+/* ---- Driver grid + cards ---- */
+.driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.driver-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px; cursor: pointer; transition: all 0.15s ease; box-shadow: var(--shadow);
+}
+.driver-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.driver-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.driver-avatar {
+  width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2);
+  display: grid; place-items: center; font-size: 18px; overflow: hidden; flex-shrink: 0;
+}
+.driver-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.safety-ring {
+  width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 12px;
+  display: grid; place-items: center; border: 6px solid var(--border);
+}
+.safety-ring.excellent { border-color: var(--green); }
+.safety-ring.good { border-color: var(--green); }
+.safety-ring.fair { border-color: var(--amber); }
+.safety-ring.poor { border-color: var(--red); }
+.ring-score { font-size: 30px; font-weight: 800; font-family: "Space Grotesk", sans-serif; line-height: 1; }
+.ring-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.driver-mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+.driver-mini-stats .v { font-weight: 700; font-size: 15px; }
+.driver-mini-stats .k { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.license-warn { margin-top: 10px; font-size: 11px; font-weight: 600; color: var(--red); text-align: center; }
+.license-warn.soon { color: var(--amber); }
+
+/* ---- Data tables (driver profile) ---- */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.data-table th { color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--border); }
+.data-table td { padding: 8px 8px; border-bottom: 1px solid var(--border); }
+.data-table tr:hover td { background: var(--surface-2); }

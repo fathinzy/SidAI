@@ -11,7 +11,14 @@ const EMPTY = {
   odometer_km: "", gps_device_id: "", tyre_condition: "", tyre_last_change: "",
 };
 
-export default function Registry() {
+interface RegistryProps { sub?: string; }
+
+export default function Registry({ sub = "vehicle" }: RegistryProps) {
+  if (sub === "driver") return <DriverRegistry />;
+  return <VehicleRegistry />;
+}
+
+function VehicleRegistry() {
   const [form, setForm] = useState<Record<string, string>>({ ...EMPTY });
   const [photo, setPhoto] = useState<string>("");
   const [saved, setSaved] = useState<any>(null);
@@ -101,6 +108,85 @@ export default function Registry() {
             {busy ? "Registering…" : "Register Vehicle"}
           </button>
           <button className="ghost" style={{ cursor: "pointer" }} onClick={() => { setForm({ ...EMPTY }); setPhoto(""); setSaved(null); }}>
+            Clear
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DRIVER_EMPTY = {
+  driver_name: "", driver_age: "", driver_gender: "", license_number: "", license_expiry: "",
+};
+
+function DriverRegistry() {
+  const [form, setForm] = useState<Record<string, string>>({ ...DRIVER_EMPTY });
+  const [photo, setPhoto] = useState<string>("");
+  const [saved, setSaved] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPhoto(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const res = await api.registerDriver({ ...form, photo });
+      setSaved(res.driver);
+      setForm({ ...DRIVER_EMPTY });
+      setPhoto("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid" style={{ gridTemplateColumns: "260px 1fr", gap: 16 }}>
+      <div className="card" style={{ textAlign: "center" }}>
+        <h3>Driver Photo</h3>
+        <div className="photo-drop">
+          {photo
+            ? <img src={photo} alt="driver" />
+            : <div className="photo-placeholder">👤<div style={{ fontSize: 12, marginTop: 6 }}>No photo</div></div>}
+        </div>
+        <label className="primary" style={{ display: "inline-block", marginTop: 12, cursor: "pointer", padding: "9px 16px", borderRadius: 9 }}>
+          Upload picture
+          <input type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
+        </label>
+        {saved && (
+          <div className="rec-item info" style={{ marginTop: 14, textAlign: "left" }}>
+            <div className="msg">✓ {saved.driver_id} registered</div>
+            <div className="meta">{saved.driver_name || "no name"}</div>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Register New Driver</h3>
+        <p className="sub">Key in the driver details. Driver ID is auto-generated on save.</p>
+
+        <div className="reg-section-title">Driver Details</div>
+        <div className="form-grid">
+          <Field label="Driver Name" k="driver_name" form={form} set={set} placeholder="e.g. Ahmad bin Hassan" />
+          <Field label="Driver Age" k="driver_age" form={form} set={set} type="number" placeholder="35" />
+          <SelectField label="Gender" k="driver_gender" form={form} set={set} options={["Male", "Female"]} />
+          <Field label="License Number" k="license_number" form={form} set={set} placeholder="e.g. D1234567" />
+          <Field label="License Expiry Date" k="license_expiry" form={form} set={set} placeholder="dd/mm/yyyy" />
+        </div>
+
+        <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
+          <button className="primary" onClick={submit} disabled={busy}>
+            {busy ? "Registering…" : "Register Driver"}
+          </button>
+          <button className="ghost" style={{ cursor: "pointer" }} onClick={() => { setForm({ ...DRIVER_EMPTY }); setPhoto(""); setSaved(null); }}>
             Clear
           </button>
         </div>

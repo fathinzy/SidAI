@@ -63,6 +63,13 @@ export const api = {
   registry: (vehicle?: string) => get<any>(`/api/registry${vehicle ? `?vehicle=${encodeURIComponent(vehicle)}` : ""}`),
   registerVehicle: (body: unknown) => post<any>("/api/registry", body),
   vehicleHistory: (vehicle: string) => get<any>(`/api/vehicle-history?vehicle=${encodeURIComponent(vehicle)}`),
+  vehicleMaintenance: (vehicle: string) => get<any>(`/api/vehicle-maintenance?vehicle=${encodeURIComponent(vehicle)}`),
+  maintenanceDone: (body: unknown) => post<any>("/api/maintenance-done", body),
+  // drivers
+  drivers: () => get<any>("/api/drivers"),
+  registerDriver: (body: unknown) => post<any>("/api/drivers", body),
+  driverDetail: (driver: string) => get<any>(`/api/driver-detail?driver=${encodeURIComponent(driver)}`),
+  suggestDriver: (body: unknown) => post<any>("/api/suggest-driver", body),
   // trip/order
   suggestVehicle: (body: unknown) => post<any>("/api/suggest-vehicle", body),
   // report

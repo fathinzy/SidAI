@@ -7,6 +7,8 @@ export default function VehicleProfile({ vehicles }: Props) {
   const [selected, setSelected] = useState<string>("");
   const [vehicle, setVehicle] = useState<any>(null);
   const [history, setHistory] = useState<any>(null);
+  const [maint, setMaint] = useState<any>(null);
+  const [showMaint, setShowMaint] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<any>({});
 
@@ -17,12 +19,24 @@ export default function VehicleProfile({ vehicles }: Props) {
   useEffect(() => {
     if (!selected) return;
     let active = true;
-    Promise.all([api.registry(selected), api.vehicleHistory(selected)]).then(([r, h]) => {
-      if (!active) return;
-      setVehicle(r.vehicle); setDraft(r.vehicle ?? {}); setHistory(h); setEditing(false);
-    });
+    Promise.all([api.registry(selected), api.vehicleHistory(selected), api.vehicleMaintenance(selected)])
+      .then(([r, h, m]) => {
+        if (!active) return;
+        setVehicle(r.vehicle); setDraft(r.vehicle ?? {}); setHistory(h); setMaint(m); setEditing(false);
+      });
     return () => { active = false; };
   }, [selected]);
+
+  async function markDone(field: string) {
+    const res = await api.maintenanceDone({ lorry_id: selected, field });
+    if (res?.maintenance) setMaint(res.maintenance);
+  }
+
+  // status -> traffic-light color for a maintenance date field (by key)
+  function statusOf(key: string): string {
+    const item = maint?.items?.find((i: any) => i.key === key);
+    return item?.status ?? "unknown";
+  }
 
   function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -47,8 +61,20 @@ export default function VehicleProfile({ vehicles }: Props) {
           </select>
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+          {maint?.overall_status && maint.overall_status !== "ok" && !editing && (
+            <button
+              className={`maint-btn ${maint.overall_status}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => setShowMaint(true)}
+            >
+              {maint.overall_status === "overdue" ? "🔧 Maintenance Due" : "🔧 Maintenance Almost Due"}
+            </button>
+          )}
           {!editing ? (
+            <>
+            <button className="ghost" style={{ cursor: "pointer" }} onClick={() => setShowMaint(true)}>🔧 Maintenance</button>
             <button className="primary" style={{ cursor: "pointer" }} onClick={() => setEditing(true)}>✎ Edit Profile</button>
+            </>
           ) : (
             <>
               <button className="primary" style={{ cursor: "pointer" }} onClick={() => { setVehicle(draft); setEditing(false); }}>Save</button>
@@ -105,10 +131,10 @@ export default function VehicleProfile({ vehicles }: Props) {
 
         <div className="card">
           <div className="reg-section-title" style={{ marginTop: 0 }}>c) Operational Details</div>
-          <EditRow label="Insurance Expiry" k="insurance_expiry" v={v} editing={editing} setF={setF} />
-          <EditRow label="Road Tax Expiry" k="roadtax_expiry" v={v} editing={editing} setF={setF} />
-          <EditRow label="Puspakom / Inspection Due" k="puspakom_due" v={v} editing={editing} setF={setF} />
-          <EditRow label="Last Service Date" k="last_service" v={v} editing={editing} setF={setF} />
+          <EditRow label="Insurance Expiry" k="insurance_expiry" v={v} editing={editing} setF={setF} status={statusOf("insurance_expiry")} />
+          <EditRow label="Road Tax Expiry" k="roadtax_expiry" v={v} editing={editing} setF={setF} status={statusOf("roadtax_expiry")} />
+          <EditRow label="Puspakom / Inspection Due" k="puspakom_due" v={v} editing={editing} setF={setF} status={statusOf("puspakom_due")} />
+          <EditRow label="Last Service Date" k="last_service" v={v} editing={editing} setF={setF} status={statusOf("last_service")} />
           <EditRow label="Odometer (km)" k="odometer_km" v={v} editing={editing} setF={setF} />
           <EditRow label="GPS / Telematics ID" k="gps_device_id" v={v} editing={editing} setF={setF} />
           <EditRow label="Tyre Condition" k="tyre_condition" v={v} editing={editing} setF={setF} />
@@ -122,6 +148,14 @@ export default function VehicleProfile({ vehicles }: Props) {
           </div>
         </div>
       </div>
+
+      {showMaint && (
+        <MaintenanceModal
+          maint={maint}
+          onClose={() => setShowMaint(false)}
+          onMarkDone={markDone}
+        />
+      )}
     </>
   );
 }
@@ -134,13 +168,64 @@ function Row({ label, val }: { label: string; val: string }) {
     </div>
   );
 }
-function EditRow({ label, k, v, editing, setF }: any) {
+function EditRow({ label, k, v, editing, setF, status }: any) {
   return (
     <div className="prow">
-      <span className="prow-k">{label}</span>
+      <span className="prow-k">
+        {status && status !== "unknown" && <span className={`status-dot ${status}`} title={status} />}
+        {label}
+      </span>
       {editing
         ? <input className="prow-input" value={v[k] ?? ""} onChange={(e) => setF(k, e.target.value)} />
-        : <span className="prow-v">{v[k] || "—"}</span>}
+        : <span className={`prow-v ${status && status !== "ok" && status !== "unknown" ? `mv-${status}` : ""}`}>{v[k] || "—"}</span>}
+    </div>
+  );
+}
+
+function MaintenanceModal({ maint, onClose, onMarkDone }: any) {
+  if (!maint) return null;
+  const items = maint.items ?? [];
+  const label: Record<string, string> = {
+    overdue: "Overdue", due_soon: "Almost due", ok: "OK", unknown: "No date",
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0 }}>Maintenance & Compliance</h3>
+          <button className="ghost" style={{ cursor: "pointer" }} onClick={onClose}>✕</button>
+        </div>
+        <p className="sub">Mark an item as done once completed. The next due date updates automatically.</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+          {items.map((it: any) => (
+            <div key={it.key} className={`maint-item ${it.status}`}>
+              <div>
+                <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className={`status-dot ${it.status}`} />{it.label}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>
+                  {it.is_service && it.last_done ? `Last done ${it.last_done} · ` : ""}
+                  Due {it.due_date || "—"}
+                  {it.days_remaining != null && (
+                    <> · {it.days_remaining < 0
+                      ? `${Math.abs(it.days_remaining)} days overdue`
+                      : `${it.days_remaining} days left`}</>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span className={`pill ${it.status === "overdue" ? "high" : it.status === "due_soon" ? "medium" : "A"}`}>
+                  {label[it.status] ?? it.status}
+                </span>
+                <button className="primary" style={{ cursor: "pointer", padding: "6px 12px" }}
+                        onClick={() => onMarkDone(it.key)}>
+                  {it.is_service ? "Mark Serviced" : "Mark Renewed"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

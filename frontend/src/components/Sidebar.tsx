@@ -36,9 +36,21 @@ const NAV: NavDef[] = [
       { id: "triplist", label: "List of Trip" },
     ],
   },
-  { id: "profile", label: "Vehicle Profile", ico: "☰" },
+  {
+    id: "profile", label: "Profile", ico: "☰",
+    subs: [
+      { id: "vehicle", label: "Vehicle Profile" },
+      { id: "driver", label: "Driver Profile" },
+    ],
+  },
   { id: "report", label: "Report", ico: "▤" },
-  { id: "registry", label: "Registry", ico: "＋" },
+  {
+    id: "registry", label: "Registry", ico: "＋",
+    subs: [
+      { id: "vehicle", label: "Vehicle Registry" },
+      { id: "driver", label: "Driver Registry" },
+    ],
+  },
 ];
 
 export default function Sidebar({

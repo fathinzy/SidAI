@@ -9,6 +9,7 @@ import TripOrder from "./pages/TripOrder";
 import Report from "./pages/Report";
 import Registry from "./pages/Registry";
 import VehicleProfile from "./pages/VehicleProfile";
+import DriverProfile from "./pages/DriverProfile";
 import TripList from "./pages/TripList";
 
 export default function App() {
@@ -51,11 +52,14 @@ export default function App() {
     "dashboard-tracking": { title: "Live Tracking", sub: "Real-time fleet positions, congestion forecasts and automated incident response." },
     "trip-neworder": { title: "New Order", sub: "Plan a shipment and let Lorriq AI recommend the greenest capable vehicle." },
     "trip-triplist": { title: "List of Trip", sub: "All scheduled, booked and completed trips across the fleet." },
-    "profile": { title: "Vehicle Profile", sub: "Full vehicle profile with specifications, compliance and operating history." },
+    "profile-vehicle": { title: "Vehicle Profile", sub: "Full vehicle profile with specifications, compliance and operating history." },
+    "profile-driver": { title: "Driver Profile", sub: "AI-powered driver safety and performance tracking. Click a driver for their full profile." },
     "report": { title: "Reports", sub: "Generate ESG reports for daily, weekly and monthly operations." },
-    "registry": { title: "Register Vehicle", sub: "Add a new vehicle to the fleet with full details and a photo." },
+    "registry-vehicle": { title: "Register Vehicle", sub: "Add a new vehicle to the fleet with full details and a photo." },
+    "registry-driver": { title: "Register Driver", sub: "Add a new driver to the registry with license details and a photo." },
   };
-  const key = tab === "dashboard" || tab === "trip" ? `${tab}-${subTab}` : tab;
+  const hasSubs = tab === "dashboard" || tab === "trip" || tab === "profile" || tab === "registry";
+  const key = hasSubs ? `${tab}-${subTab}` : tab;
   const head = headings[key] ?? headings[tab];
 
   return (
@@ -83,9 +87,10 @@ export default function App() {
           {tab === "dashboard" && subTab === "tracking" && <LiveTracking vehicles={vehicles} theme={theme} />}
           {tab === "trip" && subTab === "triplist" && <TripList vehicles={vehicles} />}
           {tab === "trip" && subTab !== "triplist" && <TripOrder />}
-          {tab === "profile" && <VehicleProfile vehicles={vehicles} />}
+          {tab === "profile" && subTab === "driver" && <DriverProfile />}
+          {tab === "profile" && subTab !== "driver" && <VehicleProfile vehicles={vehicles} />}
           {tab === "report" && <Report />}
-          {tab === "registry" && <Registry />}
+          {tab === "registry" && <Registry sub={subTab === "driver" ? "driver" : "vehicle"} />}
         </div>
       </div>
     </div>
