@@ -3,53 +3,37 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { api } from "../api";
-
-type Scope = "daily" | "weekly" | "monthly";
+import { api, Filters } from "../api";
+import FilterBar from "../components/FilterBar";
 
 const FUEL_COLORS: Record<string, string> = {
   diesel: "#c0392b", "biodiesel-b20": "#c8901f", electric: "#0e9f6e", hybrid: "#3f6b8c",
 };
 
-interface ReportProps { vehicles?: string[]; }
+interface ReportProps { vehicles?: string[]; years?: number[]; }
 
-export default function Report({ vehicles = [] }: ReportProps) {
-  const [scope, setScope] = useState<Scope>("weekly");
-  const [vehicle, setVehicle] = useState<string>("all");
-  const [data, setData] = useState<any>(null);           // report summary (for PDF + KPIs)
+export default function Report({ vehicles = [], years = [2026] }: ReportProps) {
+  const [filters, setFilters] = useState<Filters>({ period: "all", vehicle: "all" });
+  const [kpis, setKpis] = useState<any>(null);            // KPI summary (filtered)
   const [series, setSeries] = useState<any>(null);        // emission trend
   const [ranking, setRanking] = useState<any[]>([]);      // per-vehicle CO2
   const [fuelMix, setFuelMix] = useState<any[]>([]);      // fuel type distribution
   const [recs, setRecs] = useState<any[]>([]);            // AI recommendations
   const [loading, setLoading] = useState(true);
 
-  // report summary follows the scope selector
+  const vehicle = filters.vehicle ?? "all";
+
+  // KPIs + emission trend follow the full filter (time range + vehicle),
+  // identical to the Emission Tracker.
   useEffect(() => {
     let active = true;
     setLoading(true);
-    api.report(scope).then((d) => { if (active) { setData(d); setLoading(false); } });
+    Promise.all([api.kpis(filters), api.emissionSeries(filters)]).then(([k, s]) => {
+      if (!active) return;
+      setKpis(k); setSeries(s); setLoading(false);
+    });
     return () => { active = false; };
-  }, [scope]);
-
-  // Emission trend follows BOTH the scope and vehicle, using the same period
-  // logic as the Emission Tracker:
-  //   daily   -> period "day"   (x-axis = 24 hours)
-  //   weekly  -> period "month" (x-axis = days of month)  [closest bucket to a week]
-  //   monthly -> period "year"  (x-axis = Jan–Dec)
-  // Pinned to the report's reporting-period end date so it matches the summary.
-  useEffect(() => {
-    const end = data?.period?.to;                     // "dd/mm/yyyy"
-    const [dd, mm, yyyy] = (end ?? "").split("/").map((n: string) => parseInt(n, 10));
-    const year = yyyy || 2026;
-    const seriesFilter =
-      scope === "daily"
-        ? { period: "day" as const, year, month: mm || 1, day: dd || 1, vehicle }
-        : scope === "weekly"
-        ? { period: "month" as const, year, month: mm || 1, vehicle }
-        : { period: "year" as const, year, vehicle };
-
-    api.emissionSeries(seriesFilter).then((s) => setSeries(s));
-  }, [scope, vehicle, data?.period?.to]);
+  }, [filters]);
 
   // ranking / fuel mix / recommendations follow the vehicle filter
   useEffect(() => {
@@ -59,7 +43,6 @@ export default function Report({ vehicles = [] }: ReportProps) {
       api.recommendations(),
     ]).then(([r, f, rec]) => {
       setRanking((r.ranking ?? []).slice(0, 8));
-      // fuel mix: whole fleet, or just the one vehicle when filtered
       const lorries = (f.lorries ?? []).filter(
         (l: any) => vehicle === "all" || l.lorry_id === vehicle);
       const counts: Record<string, number> = {};
@@ -72,12 +55,26 @@ export default function Report({ vehicles = [] }: ReportProps) {
     });
   }, [vehicle]);
 
+  function periodLabel(): string {
+    const p = filters.period ?? "all";
+    if (p === "all") return "All time";
+    if (p === "year") return `Year ${filters.year}`;
+    if (p === "month") return `${MONTH_NAMES[(filters.month ?? 1) - 1]} ${filters.year}`;
+    return `${filters.day}/${filters.month}/${filters.year}`;
+  }
+  function xAxisLabel(): string {
+    return {
+      all: "by year", year: "by month (Jan–Dec)",
+      month: "by day of month", day: "by hour (24h)",
+    }[filters.period ?? "all"] ?? "";
+  }
+
   async function download() {
-    if (!data?.available) return;
+    if (!kpis?.available) return;
     const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
       import("jspdf"), import("jspdf-autotable"),
     ]);
-    const s = data.summary;
+    const k = kpis;
     const doc = new jsPDF();
     doc.setFillColor(217, 102, 43);
     doc.rect(0, 0, 210, 26, "F");
@@ -87,23 +84,23 @@ export default function Report({ vehicles = [] }: ReportProps) {
     doc.setFontSize(10); doc.setFont("helvetica", "normal");
     doc.text("AI Fleet Emissions & Congestion Intelligence", 14, 20);
     doc.setTextColor(40, 33, 25); doc.setFontSize(15); doc.setFont("helvetica", "bold");
-    doc.text(`${cap(scope)} ESG Report`, 14, 40);
+    doc.text("ESG Report", 14, 40);
     doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(120, 110, 95);
-    doc.text(`Reporting period: ${data.period.from} - ${data.period.to}`, 14, 47);
+    doc.text(`Reporting period: ${periodLabel()}`, 14, 47);
     doc.text(`Vehicle scope: ${vehicle === "all" ? "All vehicles (fleet-wide)" : vehicle}`, 14, 53);
     doc.text(`SDG 13 - Climate Action  |  Generated ${new Date().toLocaleString()}`, 14, 59);
     autoTable(doc, {
       startY: 68,
       head: [["ESG Metric", "Value"]],
       body: [
-        ["Total trips", s.trips.toLocaleString()],
-        ["Distance covered", `${s.distance_km.toLocaleString()} km`],
-        ["Total CO2 (with AI)", `${s.total_co2_kg.toLocaleString()} kg`],
-        ["Total CO2 (without AI / BAU)", `${s.total_co2_without_ai_kg.toLocaleString()} kg`],
-        ["CO2 avoided", `${s.co2_saved_kg.toLocaleString()} kg`],
-        ["Emission reduction", `${s.co2_saved_pct}%`],
-        ["Fuel saved", `${s.fuel_saved_litres.toLocaleString()} L`],
-        ["Trees equivalent (annual absorption)", `${s.trees_equivalent.toLocaleString()} trees`],
+        ["Total trips", (k.total_trips ?? 0).toLocaleString()],
+        ["Distance covered", `${(k.total_distance_km ?? 0).toLocaleString()} km`],
+        ["Total CO2 (with AI)", `${(k.total_co2_tonnes ?? 0).toLocaleString()} t`],
+        ["Total CO2 (without AI / BAU)", `${(k.total_co2_without_ai_tonnes ?? 0).toLocaleString()} t`],
+        ["CO2 avoided", `${(k.co2_saved_tonnes ?? 0).toLocaleString()} t`],
+        ["Emission reduction", `${k.co2_saved_pct ?? 0}%`],
+        ["Total fuel", `${(k.total_fuel_litres ?? 0).toLocaleString()} L`],
+        ["Trees equivalent (annual absorption)", `${(k.trees_equivalent ?? 0).toLocaleString()} trees`],
       ],
       headStyles: { fillColor: [217, 102, 43] },
       alternateRowStyles: { fillColor: [246, 241, 234] },
@@ -125,10 +122,11 @@ export default function Report({ vehicles = [] }: ReportProps) {
     }
 
     const vtag = vehicle === "all" ? "fleet" : vehicle;
-    doc.save(`Lorriq_${scope}_${vtag}_ESG_report_${data.period.to.replace(/\//g, "-")}.pdf`);
+    const ptag = (filters.period ?? "all");
+    doc.save(`Lorriq_${ptag}_${vtag}_ESG_report.pdf`);
   }
 
-  const s = data?.summary;
+  const k = kpis;
 
   // build the trend rows (with-AI vs standard) from the emission series
   const trendRows = (series?.points ?? []).map((p: any) => ({
@@ -139,54 +137,33 @@ export default function Report({ vehicles = [] }: ReportProps) {
 
   return (
     <>
-      <div className="filters">
-        <div className="field">
-          <label>Report scope</label>
-          <select value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>Vehicle</label>
-          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)}>
-            <option value="all">All vehicles</option>
-            {vehicles.map((v) => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </div>
-        <div style={{ display: "flex", alignItems: "flex-end" }}>
-          <button className="primary" onClick={download} disabled={!data?.available}>⬇ Download PDF</button>
-        </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} years={years} showTime />
+        <button className="primary" style={{ cursor: "pointer" }}
+                onClick={download} disabled={!k?.available}>⬇ Download PDF</button>
       </div>
 
       {/* KPI target cards */}
-      {loading ? <div className="loading">Compiling analytics…</div> : !s ? (
+      {loading ? <div className="loading">Compiling analytics…</div> : !k?.available ? (
         <div className="card"><p className="sub">No data available for this period.</p></div>
       ) : (
         <>
           <div className="grid kpi-grid" style={{ marginBottom: 16 }}>
-            <TargetCard label="CO₂ Avoided" value={`${s.co2_saved_kg.toLocaleString()} kg`}
-                        pct={Math.min(100, s.co2_saved_pct * 2)} target={`${s.co2_saved_pct}% reduction`} tone="green" />
-            <TargetCard label="Emission Reduction" value={`${s.co2_saved_pct}%`}
-                        pct={Math.min(100, s.co2_saved_pct * 2.5)} target="Target: 15% (EU 2025)" tone="green" />
-            <TargetCard label="Fuel Saved" value={`${s.fuel_saved_litres.toLocaleString()} L`}
-                        pct={Math.min(100, 70)} target={`${s.trees_equivalent.toLocaleString()} trees/yr`} tone="gold" />
-            <TargetCard label="Distance" value={`${s.distance_km.toLocaleString()} km`}
-                        pct={80} target={`${s.trips.toLocaleString()} trips`} tone="blue" />
+            <TargetCard label="CO₂ Avoided" value={`${(k.co2_saved_tonnes ?? 0).toLocaleString()} t`}
+                        pct={Math.min(100, (k.co2_saved_pct ?? 0) * 2)} target={`${k.co2_saved_pct ?? 0}% reduction`} tone="green" />
+            <TargetCard label="Emission Reduction" value={`${k.co2_saved_pct ?? 0}%`}
+                        pct={Math.min(100, (k.co2_saved_pct ?? 0) * 2.5)} target="Target: 15% (EU 2025)" tone="green" />
+            <TargetCard label="Trees Equivalent" value={(k.trees_equivalent ?? 0).toLocaleString()}
+                        pct={70} target="mature trees / year" tone="gold" />
+            <TargetCard label="Distance" value={`${(k.total_distance_km ?? 0).toLocaleString()} km`}
+                        pct={80} target={`${(k.total_trips ?? 0).toLocaleString()} trips`} tone="blue" />
           </div>
 
           {/* Charts row */}
           <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", gap: 16, marginBottom: 16 }}>
             <div className="card">
               <h3>Carbon Emissions Trend</h3>
-              <p className="sub">
-                CO₂ (tonnes): AI-optimised vs standard routing · {
-                  scope === "daily" ? "by hour (24h)"
-                  : scope === "weekly" ? "by day of month"
-                  : "by month (Jan–Dec)"
-                }.
-              </p>
+              <p className="sub">CO₂ (tonnes): AI-optimised vs standard routing · {xAxisLabel()}.</p>
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={trendRows} margin={{ top: 5, right: 10, bottom: 5, left: -18 }}>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
@@ -273,4 +250,5 @@ function TargetCard({ label, value, pct, target, tone }: any) {
     </div>
   );
 }
-function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
